@@ -1,6 +1,8 @@
 import pdfplumber
 import os
 import re
+import sys
+import glob
 
 def extrair_informacoes_pdf(caminho_pdf):
     try:
@@ -207,6 +209,56 @@ def processar_pdf_unico(caminho_pdf):
 
 
 if __name__ == "__main__":
-    # 👇 Coloque o caminho do seu PDF aqui
-    caminho_pdf = r"C:\Users\karen.takara\OneDrive - Essie Publicidade e Comunicacao Ltda\Documentos\extracao de pdf\arquivo.pdf"
+    # Uso:
+    #   python extracao_pdf.py <caminho_para_pdf>
+    # Se nenhum caminho for passado, o script tentará (na ordem):
+    # 1) o arquivo 'arquivo.pdf' na mesma pasta do script
+    # 2) o primeiro arquivo .pdf encontrado no diretório atual
+    # 3) o caminho hardcoded usado anteriormente (OneDrive)
+
+    # caminho hardcoded antigo (mantido como última tentativa)
+    caminho_hardcoded = r"C:\Users\karen.takara\OneDrive - Essie Publicidade e Comunicacao Ltda\Documentos\extracao de pdf\arquivo.pdf"
+
+    caminho_pdf = None
+
+    # 1) argumento de linha de comando
+    if len(sys.argv) > 1:
+        caminho_pdf = sys.argv[1]
+
+    # 2) se não fornecido, tenta arquivo.pdf no mesmo diretório do script
+    if not caminho_pdf:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        candidato = os.path.join(script_dir, 'arquivo.pdf')
+        if os.path.exists(candidato):
+            caminho_pdf = candidato
+
+    # 3) se ainda não, tenta o primeiro .pdf no cwd
+    if not caminho_pdf:
+        lista_pdf = glob.glob(os.path.join(os.getcwd(), '*.pdf'))
+        if lista_pdf:
+            caminho_pdf = lista_pdf[0]
+
+    # 4) por fim, tenta o caminho hardcoded
+    if not caminho_pdf and os.path.exists(caminho_hardcoded):
+        caminho_pdf = caminho_hardcoded
+
+    # Se não encontramos nenhum caminho válido, mostra diagnóstico e sai
+    if not caminho_pdf or not os.path.exists(caminho_pdf):
+        print("\n❌ Arquivo PDF não encontrado.")
+        print("Dicas:")
+        print(" - Passe o caminho para o PDF como argumento: python extracao_pdf.py 'C:\\caminho\\para\\arquivo.pdf'")
+        print(" - Coloque o PDF chamado 'arquivo.pdf' na mesma pasta do script:")
+        print(f"   {os.path.dirname(os.path.abspath(__file__))}")
+        print(" - Ou mova/ponha o PDF no diretório de trabalho atual:")
+        print(f"   {os.getcwd()}")
+        # lista arquivos .pdf no cwd para ajudar
+        encontrados = glob.glob(os.path.join(os.getcwd(), '*.pdf'))
+        if encontrados:
+            print("\nArquivos .pdf encontrados no diretório atual:")
+            for p in encontrados:
+                print(f" - {p}")
+        else:
+            print("\nNenhum arquivo .pdf encontrado no diretório atual.")
+        sys.exit(1)
+
     processar_pdf_unico(caminho_pdf)
