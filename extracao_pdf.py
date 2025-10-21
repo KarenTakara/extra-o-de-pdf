@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import glob
+import pandas as pd
 
 def extrair_informacoes_pdf(caminho_pdf):
     try:
@@ -34,18 +35,15 @@ def extrair_informacoes_pdf(caminho_pdf):
             'Vencimento': '',
             'Produto': '',
             'Campanha': '',
-            'Total Inserções': '',
+            'Total Geral': '',
             'Negociado': '',
             'Cachê': '',
-            'Total Item': '',
+            'Total Geral': '',
             'Total Bruto': '',
             'Desconto da agência': '',
             'Comissão de Agência': '',
-            'Comissão da SBC': '',
-            'Comissão da ESSIÊ': '',
             'Comissão da empresa': '',
             'Total Líquido': '',
-            'Controle Interno': '',
             'Emitido Por': ''
         }
 
@@ -92,14 +90,17 @@ def extrair_informacoes_pdf(caminho_pdf):
         m = re.search(r'CNPJ:\s*([^\n]+?)\s*CEP:', texto_completo)
         if m: info['CNPJ Veículo'] = m.group(1).strip()
 
-        m = re.search(r'CEP:\s*([^\n]+?)\s*CNPJ:', texto_completo)
-        if m: info['CEP Veículo'] = m.group(1).strip()
-
         m = re.search(r'CNPJ:.*CNPJ:\s*([^\n]+?)\s*CEP:', texto_completo)
         if m: info['CNPJ Cliente'] = m.group(1).strip()
 
-        m = re.search(r'CEP:.*CEP:\s*([\d\- ]{8,9})', texto_completo)
-        if m: info['CEP Cliente'] = m.group(1).strip()
+       # Pega todos os CEPs
+        # Corrige a captura dos CEPs com validação
+        cep = re.findall(r'CEP:\s*(\d{5}-?\d{3})(?!\d)', texto_completo)
+        if len(cep) >= 1:
+            info['CEP Veículo'] = cep[0].strip()
+        if len(cep) >= 2:
+            info['CEP Cliente'] = cep[1].strip()
+
 
         m = re.search(r'PRODUTO:\s*([^\n]+?)\s*EMISSÃO:', texto_completo)
         if m: info['Produto'] = m.group(1).strip()
@@ -110,10 +111,12 @@ def extrair_informacoes_pdf(caminho_pdf):
         m = re.search(r'CAMPANHA:\s*([^\n]+?)\s*PÁGINA:', texto_completo)
         if m: info['Campanha'] = m.group(1).strip()
 
-        m = re.search(r'TOTAL GERAL\s*(\d+)\s*([\d.,]+)', texto_completo)
+        m = re.search(r'TOTAL GERAL\s+(\d+)', texto_completo)
         if m:
-            info['Total Inserções'] = m.group(1).strip()
-            info['Total Item'] = m.group(2).strip()
+            info['Total Geral'] = m.group(1).strip()
+        else:
+            info['Total Geral'] = '0'
+
 
         m = re.search(r'NEGOC\s*([\d.,]+)', texto_completo)
         if m: info['Negociado'] = m.group(1).strip()
@@ -126,12 +129,6 @@ def extrair_informacoes_pdf(caminho_pdf):
 
         m = re.search(r'Comissão de Agência \(20%\)\s*([\d.,]+)', texto_completo)
         if m: info['Comissão de Agência'] = m.group(1).strip()
-
-        m = re.search(r'Comiss[aã]o da SBC.*?([\d.,]+)', texto_completo, re.IGNORECASE)
-        if m: info['Comissão da SBC'] = m.group(1).strip()
-
-        m = re.search(r'Comiss[aã]o da\s*ESSI[ÊE]?.*?([\d.,]+)', texto_completo, re.IGNORECASE)
-        if m: info['Comissão da ESSIÊ'] = m.group(1).strip()
 
         # --- Comissão da Empresa (Agência ou SBC) ---
         m = re.search(
@@ -168,21 +165,10 @@ def extrair_informacoes_pdf(caminho_pdf):
                     info['Desconto da agência'] = m.group(1).strip()
                 break  # sai do loop depois de encontrar
 
-        # === Captura Comissão da ESSIÊ ===
-        for linha in linhas:
-            if re.search(r'Comiss[aã]o.*ESSI[ÊE]?', linha, re.IGNORECASE):
-                m = re.search(r'([\d]{1,3}(?:[\.\d]{0,3})*,\d{2})', linha)
-                if m:
-                    info['Comissão da ESSIÊ'] = m.group(1).strip()
-                break
-
 
 
         m = re.search(r'Total Líquido\s*([\d.,]+)', texto_completo)
         if m: info['Total Líquido'] = m.group(1).strip()
-
-        m = re.search(r'Controle Interno SBC: PI - (\d+)', texto_completo)
-        if m: info['Controle Interno'] = m.group(1).strip()
 
         m = re.search(r'Emitido por:\s*([^\n]+)', texto_completo)
         if m: info['Emitido Por'] = m.group(1).strip()
@@ -262,3 +248,39 @@ if __name__ == "__main__":
         sys.exit(1)
 
     processar_pdf_unico(caminho_pdf)
+
+
+def processar_varios_pdfs(diretorio):
+    lista_infos = []
+    arquivos_pdf = glob.glob(os.path.join(diretorio, "*.pdf"))
+
+    if not arquivos_pdf:
+        print("❌ Nenhum PDF encontrado no diretório.")
+        return
+
+    for caminho_pdf in arquivos_pdf:
+        print(f"\n📄 Processando arquivo: {caminho_pdf}")
+        info = extrair_informacoes_pdf(caminho_pdf)
+        if info:
+            lista_infos.append(info)
+        else:
+            print(f"⚠️ Falha ao extrair dados de: {caminho_pdf}")
+
+    if lista_infos:
+        # Converter para DataFrame e salvar em Excel
+        df = pd.DataFrame(lista_infos)
+        caminho_excel = os.path.join(diretorio, "resultado_extracao.xlsx")
+        df.to_excel(caminho_excel, index=False)
+        print(f"\n✅ Arquivo Excel gerado com sucesso: {caminho_excel}")
+    else:
+        print("⚠️ Nenhuma informação extraída de nenhum PDF.")
+
+
+if __name__ == "__main__":
+    # Se quiser passar um diretório como argumento, pode fazer: python extracao_pdf.py C:\pasta
+    if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
+        diretorio_pdf = sys.argv[1]
+    else:
+        diretorio_pdf = os.getcwd()  # Diretório atual como padrão
+
+    processar_varios_pdfs(diretorio_pdf)
